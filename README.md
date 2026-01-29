@@ -58,6 +58,33 @@ export OPENCODE_BACKUP_PATH="/path/to/backup/folder"
 
 </details>
 
+### debug mode
+
+enable debug logging:
+
+<details open>
+<summary><b>opencode config</b></summary>
+
+```json
+{
+  "session-backup": {
+    "backupPath": "/path/to/backup/folder",
+    "debug": true
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><b>environment variable</b></summary>
+
+```bash
+export OPENCODE_BACKUP_DEBUG="true"
+```
+
+</details>
+
 ### default paths
 
 | platform | default destination |

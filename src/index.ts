@@ -7,6 +7,7 @@ import { homedir, platform } from "os";
 
 interface PluginConfig {
   backupPath?: string;
+  debug?: boolean;
 }
 
 function getDefaultDestination(): string {
@@ -36,6 +37,7 @@ function getSource(): string {
 
 let destination = "";
 let source = "";
+let debugMode = false;
 let syncTimeout: ReturnType<typeof setTimeout> | null = null;
 let lastSyncTime = 0;
 let lastSyncSuccess = true;
@@ -48,6 +50,12 @@ interface SyncResult {
   duration: number;
   filesChanged?: number;
   error?: string;
+}
+
+function debugLog(message: string, ...args: unknown[]) {
+  if (debugMode) {
+    console.debug(message, ...args);
+  }
 }
 
 async function runSync(): Promise<SyncResult> {
@@ -205,13 +213,13 @@ function scheduleSync() {
     syncTimeout = null;
     lastSyncTime = Date.now();
 
-    console.debug("[session-backup] Starting backup...");
+    debugLog("[session-backup] Starting backup...");
     const result = await runSync();
     lastSyncSuccess = result.success;
 
     if (result.success) {
       syncCount++;
-      console.debug(`[session-backup] Backup complete in ${(result.duration / 1000).toFixed(1)}s`);
+      debugLog(`[session-backup] Backup complete in ${(result.duration / 1000).toFixed(1)}s`);
     } else {
       console.error(`[session-backup] Backup failed: ${result.error}`);
     }
@@ -265,18 +273,22 @@ function getBackupStats(): { sessions: number; size: string; lastModified: Date 
 const gdriveSessionSyncPlugin = async (input: PluginInput): Promise<Hooks> => {
   source = getSource();
   destination = process.env.OPENCODE_BACKUP_PATH || getDefaultDestination();
+  debugMode = process.env.OPENCODE_BACKUP_DEBUG === "true";
 
-  console.debug("[session-backup] Plugin loaded");
-  console.debug(`[session-backup] Source: ${source}`);
-  console.debug(`[session-backup] Destination: ${destination}`);
+  debugLog("[session-backup] Plugin loaded");
+  debugLog(`[session-backup] Source: ${source}`);
+  debugLog(`[session-backup] Destination: ${destination}`);
 
   return {
     config: async (config) => {
       const pluginConfig = (config as Record<string, unknown>)["session-backup"] as PluginConfig | undefined;
       if (pluginConfig?.backupPath) {
         destination = pluginConfig.backupPath;
-        console.debug(`[session-backup] Config override: ${destination}`);
       }
+      if (pluginConfig?.debug !== undefined) {
+        debugMode = pluginConfig.debug;
+      }
+      debugLog(`[session-backup] Config override: ${destination}`);
     },
 
     event: async ({ event }) => {
