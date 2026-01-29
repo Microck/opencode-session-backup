@@ -1,0 +1,49 @@
+{
+  "name": "opencode-session-backup",
+  "version": "1.0.0",
+  "description": "OpenCode plugin that automatically backs up sessions to Google Drive or any folder",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "opencode",
+    "plugin",
+    "backup",
+    "google-drive",
+    "sessions",
+    "sync"
+  ],
+  "author": "Microck",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Microck/opencode-session-backup.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Microck/opencode-session-backup/issues"
+  },
+  "homepage": "https://github.com/Microck/opencode-session-backup#readme",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.1.42"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0"
+  }
+}
