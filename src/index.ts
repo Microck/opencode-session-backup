@@ -11,6 +11,10 @@ interface PluginConfig {
 
 function getDefaultDestination(): string {
   if (platform() === "win32") {
+    const spanishPath = "G:/Mi unidad/opencode-sessions";
+    if (existsSync("G:/Mi unidad")) {
+      return spanishPath;
+    }
     return join(homedir(), "Google Drive", "opencode-sessions");
   }
   return join(
