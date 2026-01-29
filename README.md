@@ -1,16 +1,13 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Microck/opencode-session-backup/main/assets/logo.png" width="100" alt="opencode-session-backup">
-</p>
+# Session Backup Plugin for Opencode
 
-<p align="center">
+
   opencode plugin that backs up your sessions to google drive (or anywhere) so you stop losing work when things crash.
-</p>
 
-<p align="center">
+
   <a href="https://www.npmjs.com/package/opencode-session-backup"><img src="https://img.shields.io/npm/v/opencode-session-backup.svg" alt="npm version"></a>
   <a href="https://www.npmjs.com/package/opencode-session-backup"><img src="https://img.shields.io/npm/dw/opencode-session-backup.svg" alt="npm downloads"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-</p>
+
 
 ---
 
