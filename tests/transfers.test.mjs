@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,rm,chmod,realpath} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,rm,chmod,realpath,access} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
-import {join,delimiter,isAbsolute} from 'node:path';
+import {join,dirname,delimiter,isAbsolute} from 'node:path';
 import {execFile,spawnSync} from 'node:child_process';
 import {promisify} from 'node:util';
 const exec=promisify(execFile);
@@ -77,5 +77,16 @@ test('relative destination names are absolute native command arguments', {skip:p
   const args=JSON.parse(await readFile(argsFile,'utf8'));
   assert(isAbsolute(args.at(-1)));
   assert.equal(await realpath(args.at(-1)),await realpath(join(root,'--backup')));
+ });
+});
+
+test('new backup directories cannot reveal an overlapping case alias',async()=>{
+ await fixture(async({root,source,env})=>{
+  const probe=join(root,'CaseProbe');await mkdir(probe);
+  const insensitive=await access(join(root,'caseprobe')).then(()=>true,()=>false);
+  await rm(source,{recursive:true});
+  const alias=join(dirname(source),'STORAGE');
+  const {stdout}=await exec(process.execPath,[driver,'sync'],{env:{...env,OPENCODE_BACKUP_PATH:alias},timeout:5000});
+  assert.match(stdout,insensitive?/separate directory trees/:/Source not found/);
  });
 });

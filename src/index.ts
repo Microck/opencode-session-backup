@@ -103,6 +103,13 @@ async function runSyncUnlocked(): Promise<SyncResult> {
     }
   }
 
+  // Creating a previously absent directory can reveal a case alias.
+  try {
+    assertSeparateTrees(source, destination);
+  } catch (error) {
+    return { success: false, duration: 0, error: String(error) };
+  }
+
   if (!existsSync(source)) {
     return { success: false, duration: 0, error: `Source not found: ${source}` };
   }
@@ -197,6 +204,13 @@ async function runRestoreUnlocked(): Promise<SyncResult> {
     } catch (err) {
       return { success: false, duration: 0, error: `Failed to create source: ${err}` };
     }
+  }
+
+  // Creating a previously absent directory can reveal a case alias.
+  try {
+    assertSeparateTrees(source, destination);
+  } catch (error) {
+    return { success: false, duration: 0, error: String(error) };
   }
 
   return new Promise((resolve) => {
