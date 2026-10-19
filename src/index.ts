@@ -62,8 +62,12 @@ function debugLog(message: string, ...args: unknown[]) {
 // Every automatic/manual backup and restore uses the same transfer queue.
 // A pending request stays queued until the previous child has closed.
 let transferTail: Promise<unknown> = Promise.resolve();
+let pendingTransfers = 0;
 function serializeTransfer(operation: () => Promise<SyncResult>): Promise<SyncResult> {
-  const result = transferTail.then(operation, operation);
+  pendingTransfers++;
+  const result = transferTail.then(operation, operation).finally(() => {
+    pendingTransfers--;
+  });
   transferTail = result.catch(() => undefined);
   return result;
 }
@@ -383,7 +387,7 @@ const gdriveSessionSyncPlugin = async (input: PluginInput): Promise<Hooks> => {
         args: {},
         async execute() {
           const stats = getBackupStats();
-          const pending = syncTimeout !== null;
+          const pending = syncTimeout !== null || pendingTransfers > 0;
           const timeSinceSync = lastSyncTime ? Math.floor((Date.now() - lastSyncTime) / 1000) : null;
 
           const lines = [

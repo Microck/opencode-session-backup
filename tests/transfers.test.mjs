@@ -60,6 +60,8 @@ test('sync and restore transfer subprocesses never overlap',async()=>{
   const {stdout}=await exec(process.execPath,[driver,'concurrent'],{env,timeout:15000});
   const result=JSON.parse(stdout);
   assert.equal(result.maxActive,1);
+  assert.match(result.pendingStatus,/Sync pending: yes/);
+  assert.match(result.settledStatus,/Sync pending: no/);
   assert.equal(result.results.length,3);
   assert(result.results.every(value=>/^(Backup|Restore) complete/.test(value)));
  });
