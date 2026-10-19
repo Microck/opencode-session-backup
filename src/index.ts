@@ -3,7 +3,7 @@ import type { PluginInput, Hooks } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin/tool";
 import { spawn } from "child_process";
 import { existsSync, mkdirSync, readdirSync, statSync } from "fs";
-import { join } from "path";
+import { join, resolve } from "path";
 import { homedir, platform } from "os";
 
 interface PluginConfig {
@@ -59,7 +59,22 @@ function debugLog(message: string, ...args: unknown[]) {
   }
 }
 
-async function runSync(): Promise<SyncResult> {
+// Every automatic/manual backup and restore uses the same transfer queue.
+// A pending request stays queued until the previous child has closed.
+let transferTail: Promise<unknown> = Promise.resolve();
+function serializeTransfer(operation: () => Promise<SyncResult>): Promise<SyncResult> {
+  const result = transferTail.then(operation, operation);
+  transferTail = result.catch(() => undefined);
+  return result;
+}
+function runSync(): Promise<SyncResult> {
+  return serializeTransfer(runSyncUnlocked);
+}
+function runRestore(): Promise<SyncResult> {
+  return serializeTransfer(runRestoreUnlocked);
+}
+
+async function runSyncUnlocked(): Promise<SyncResult> {
   const startTime = Date.now();
 
   if (!destination) {
@@ -159,7 +174,7 @@ async function runSync(): Promise<SyncResult> {
   });
 }
 
-async function runRestore(): Promise<SyncResult> {
+async function runRestoreUnlocked(): Promise<SyncResult> {
   const startTime = Date.now();
 
   if (!destination || !existsSync(destination)) {
@@ -288,8 +303,8 @@ function getBackupStats(): { sessions: number; size: string; lastModified: Date 
 }
 
 const gdriveSessionSyncPlugin = async (input: PluginInput): Promise<Hooks> => {
-  source = getSource();
-  destination = process.env.OPENCODE_BACKUP_PATH || getDefaultDestination();
+  source = resolve(getSource());
+  destination = resolve(process.env.OPENCODE_BACKUP_PATH || getDefaultDestination());
   debugMode = process.env.OPENCODE_BACKUP_DEBUG === "true";
 
   debugLog("[session-backup] Plugin loaded");
@@ -300,7 +315,7 @@ const gdriveSessionSyncPlugin = async (input: PluginInput): Promise<Hooks> => {
     config: async (config) => {
       const pluginConfig = (config as Record<string, unknown>)["session-backup"] as PluginConfig | undefined;
       if (pluginConfig?.backupPath) {
-        destination = pluginConfig.backupPath;
+        destination = resolve(pluginConfig.backupPath);
       }
       if (pluginConfig?.debug !== undefined) {
         debugMode = pluginConfig.debug;

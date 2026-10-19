@@ -47,3 +47,32 @@ test('updates during cooldown remain scheduled', {skip:process.platform!=='win32
   assert.equal(await readFile(join(destination,'session.json'),'utf8'),'synthetic event update');
  });
 });
+
+test('sync and restore transfer subprocesses never overlap',async()=>{
+ await fixture(async({root,source,env})=>{
+  await writeFile(join(source,'session.json'),'synthetic original');
+  if(process.platform!=='win32'){
+   const bin=join(root,'bin');await mkdir(bin);
+   const command=join(bin,'rsync');
+   await writeFile(command,`#!${process.execPath}\nsetTimeout(()=>console.log('Number of regular files transferred: 1'),100);`);
+   await chmod(command,0o700);env.PATH=bin+delimiter+env.PATH;
+  }
+  const {stdout}=await exec(process.execPath,[driver,'concurrent'],{env,timeout:15000});
+  const result=JSON.parse(stdout);
+  assert.equal(result.maxActive,1);
+  assert.equal(result.results.length,3);
+  assert(result.results.every(value=>/^(Backup|Restore) complete/.test(value)));
+ });
+});
+
+test('relative destination names are absolute native command arguments', {skip:process.platform==='win32'},async()=>{
+ await fixture(async({root,env})=>{
+  const bin=join(root,'bin');await mkdir(bin);
+  const argsFile=join(root,'args.json');const command=join(bin,'rsync');
+  await writeFile(command,`#!${process.execPath}\nrequire('node:fs').writeFileSync(process.env.ARGS_FILE,JSON.stringify(process.argv.slice(2)));`);
+  await chmod(command,0o700);
+  await exec(process.execPath,[driver,'sync'],{cwd:root,env:{...env,OPENCODE_BACKUP_PATH:'--backup',ARGS_FILE:argsFile,PATH:bin+delimiter+env.PATH},timeout:5000});
+  const args=JSON.parse(await readFile(argsFile,'utf8'));
+  assert.equal(args.at(-1),join(root,'--backup')+'/');
+ });
+});
