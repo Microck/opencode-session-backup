@@ -2,7 +2,7 @@ name: Backup safety and native transfer verification
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [swag]
 permissions:
   contents: read
 jobs:
