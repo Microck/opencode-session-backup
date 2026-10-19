@@ -1,3 +1,4 @@
+import { assertSeparateTrees } from "./paths.js";
 import type { PluginInput, Hooks } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin/tool";
 import { spawn } from "child_process";
@@ -65,6 +66,12 @@ async function runSync(): Promise<SyncResult> {
     return { success: false, duration: 0, error: "No backup path configured" };
   }
 
+  try {
+    assertSeparateTrees(source, destination);
+  } catch (error) {
+    return { success: false, duration: 0, error: String(error) };
+  }
+
   if (!existsSync(destination)) {
     try {
       mkdirSync(destination, { recursive: true });
@@ -84,7 +91,7 @@ async function runSync(): Promise<SyncResult> {
   return new Promise((resolve) => {
     if (platform() !== "win32") {
       const rsync = spawn("rsync", [
-        "-av",
+        "-a",
         "--delete",
         "--stats",
         source + "/",
@@ -93,6 +100,7 @@ async function runSync(): Promise<SyncResult> {
 
       let output = "";
       rsync.stdout.on("data", (data) => (output += data));
+      rsync.stderr.resume();
 
       rsync.on("close", (code) => {
         const filesMatch = output.match(/Number of regular files transferred: (\d+)/);
@@ -127,6 +135,7 @@ async function runSync(): Promise<SyncResult> {
 
       let output = "";
       robocopy.stdout.on("data", (data) => (output += data));
+      robocopy.stderr.resume();
 
       robocopy.on("close", (code) => {
         // robocopy: 0-7 success, 8+ error
@@ -157,6 +166,12 @@ async function runRestore(): Promise<SyncResult> {
     return { success: false, duration: 0, error: `Backup not found: ${destination}` };
   }
 
+  try {
+    assertSeparateTrees(source, destination);
+  } catch (error) {
+    return { success: false, duration: 0, error: String(error) };
+  }
+
   if (!existsSync(source)) {
     try {
       mkdirSync(source, { recursive: true });
@@ -167,7 +182,9 @@ async function runRestore(): Promise<SyncResult> {
 
   return new Promise((resolve) => {
     if (platform() !== "win32") {
-      const rsync = spawn("rsync", ["-av", "--delete", destination + "/", source + "/"]);
+      const rsync = spawn("rsync", ["-a", "--delete", destination + "/", source + "/"]);
+      rsync.stdout.resume();
+      rsync.stderr.resume();
 
       rsync.on("close", (code) => {
         resolve({
@@ -182,6 +199,8 @@ async function runRestore(): Promise<SyncResult> {
       });
     } else {
       const robocopy = spawn("robocopy", [destination, source, "/MIR", "/MT:8", "/R:2", "/W:1", "/NP", "/NDL"]);
+      robocopy.stdout.resume();
+      robocopy.stderr.resume();
 
       robocopy.on("close", (code) => {
         resolve({
@@ -201,9 +220,7 @@ async function runRestore(): Promise<SyncResult> {
 function scheduleSync() {
   const now = Date.now();
 
-  if (now - lastSyncTime < SYNC_DEBOUNCE_MS) {
-    return;
-  }
+  const delay = Math.max(SYNC_DELAY_MS, SYNC_DEBOUNCE_MS - (now - lastSyncTime));
 
   if (syncTimeout) {
     clearTimeout(syncTimeout);
@@ -223,7 +240,7 @@ function scheduleSync() {
     } else {
       console.error(`[session-backup] Backup failed: ${result.error}`);
     }
-  }, SYNC_DELAY_MS);
+  }, delay);
 }
 
 function getBackupStats(): { sessions: number; size: string; lastModified: Date | null } {
