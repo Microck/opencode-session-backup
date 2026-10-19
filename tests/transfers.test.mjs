@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,rm,chmod} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,rm,chmod,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
-import {join,delimiter} from 'node:path';
+import {join,delimiter,isAbsolute} from 'node:path';
 import {execFile,spawnSync} from 'node:child_process';
 import {promisify} from 'node:util';
 const exec=promisify(execFile);
@@ -73,6 +73,7 @@ test('relative destination names are absolute native command arguments', {skip:p
   await chmod(command,0o700);
   await exec(process.execPath,[driver,'sync'],{cwd:root,env:{...env,OPENCODE_BACKUP_PATH:'--backup',ARGS_FILE:argsFile,PATH:bin+delimiter+env.PATH},timeout:5000});
   const args=JSON.parse(await readFile(argsFile,'utf8'));
-  assert.equal(args.at(-1),join(root,'--backup')+'/');
+  assert(isAbsolute(args.at(-1)));
+  assert.equal(await realpath(args.at(-1)),await realpath(join(root,'--backup')));
  });
 });
