@@ -43,7 +43,7 @@ test('updates during cooldown remain scheduled', {skip:process.platform!=='win32
  await fixture(async({source,destination,env})=>{
   await writeFile(join(source,'session.json'),'synthetic original');
   const result=await exec(process.execPath,[driver,'scheduled'],{env,timeout:40000});
-  assert.match(result.stdout,/Pending sync: yes/);
+  assert.match(result.stdout,/Sync pending: yes/);
   assert.equal(await readFile(join(destination,'session.json'),'utf8'),'synthetic event update');
  });
 });
