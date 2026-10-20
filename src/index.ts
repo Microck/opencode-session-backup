@@ -1,8 +1,9 @@
+import { assertSeparateTrees } from "./paths.js";
 import type { PluginInput, Hooks } from "@opencode-ai/plugin";
 import { tool } from "@opencode-ai/plugin/tool";
 import { spawn } from "child_process";
 import { existsSync, mkdirSync, readdirSync, statSync } from "fs";
-import { join } from "path";
+import { join, resolve } from "path";
 import { homedir, platform } from "os";
 
 interface PluginConfig {
@@ -58,11 +59,36 @@ function debugLog(message: string, ...args: unknown[]) {
   }
 }
 
-async function runSync(): Promise<SyncResult> {
+// Every automatic/manual backup and restore uses the same transfer queue.
+// A pending request stays queued until the previous child has closed.
+let transferTail: Promise<unknown> = Promise.resolve();
+let pendingTransfers = 0;
+function serializeTransfer(operation: () => Promise<SyncResult>): Promise<SyncResult> {
+  pendingTransfers++;
+  const result = transferTail.then(operation, operation).finally(() => {
+    pendingTransfers--;
+  });
+  transferTail = result.catch(() => undefined);
+  return result;
+}
+function runSync(): Promise<SyncResult> {
+  return serializeTransfer(runSyncUnlocked);
+}
+function runRestore(): Promise<SyncResult> {
+  return serializeTransfer(runRestoreUnlocked);
+}
+
+async function runSyncUnlocked(): Promise<SyncResult> {
   const startTime = Date.now();
 
   if (!destination) {
     return { success: false, duration: 0, error: "No backup path configured" };
+  }
+
+  try {
+    assertSeparateTrees(source, destination);
+  } catch (error) {
+    return { success: false, duration: 0, error: String(error) };
   }
 
   if (!existsSync(destination)) {
@@ -77,6 +103,13 @@ async function runSync(): Promise<SyncResult> {
     }
   }
 
+  // Creating a previously absent directory can reveal a case alias.
+  try {
+    assertSeparateTrees(source, destination);
+  } catch (error) {
+    return { success: false, duration: 0, error: String(error) };
+  }
+
   if (!existsSync(source)) {
     return { success: false, duration: 0, error: `Source not found: ${source}` };
   }
@@ -84,7 +117,7 @@ async function runSync(): Promise<SyncResult> {
   return new Promise((resolve) => {
     if (platform() !== "win32") {
       const rsync = spawn("rsync", [
-        "-av",
+        "-a",
         "--delete",
         "--stats",
         source + "/",
@@ -93,6 +126,7 @@ async function runSync(): Promise<SyncResult> {
 
       let output = "";
       rsync.stdout.on("data", (data) => (output += data));
+      rsync.stderr.resume();
 
       rsync.on("close", (code) => {
         const filesMatch = output.match(/Number of regular files transferred: (\d+)/);
@@ -127,6 +161,7 @@ async function runSync(): Promise<SyncResult> {
 
       let output = "";
       robocopy.stdout.on("data", (data) => (output += data));
+      robocopy.stderr.resume();
 
       robocopy.on("close", (code) => {
         // robocopy: 0-7 success, 8+ error
@@ -150,11 +185,17 @@ async function runSync(): Promise<SyncResult> {
   });
 }
 
-async function runRestore(): Promise<SyncResult> {
+async function runRestoreUnlocked(): Promise<SyncResult> {
   const startTime = Date.now();
 
   if (!destination || !existsSync(destination)) {
     return { success: false, duration: 0, error: `Backup not found: ${destination}` };
+  }
+
+  try {
+    assertSeparateTrees(source, destination);
+  } catch (error) {
+    return { success: false, duration: 0, error: String(error) };
   }
 
   if (!existsSync(source)) {
@@ -165,9 +206,18 @@ async function runRestore(): Promise<SyncResult> {
     }
   }
 
+  // Creating a previously absent directory can reveal a case alias.
+  try {
+    assertSeparateTrees(source, destination);
+  } catch (error) {
+    return { success: false, duration: 0, error: String(error) };
+  }
+
   return new Promise((resolve) => {
     if (platform() !== "win32") {
-      const rsync = spawn("rsync", ["-av", "--delete", destination + "/", source + "/"]);
+      const rsync = spawn("rsync", ["-a", "--delete", destination + "/", source + "/"]);
+      rsync.stdout.resume();
+      rsync.stderr.resume();
 
       rsync.on("close", (code) => {
         resolve({
@@ -182,6 +232,8 @@ async function runRestore(): Promise<SyncResult> {
       });
     } else {
       const robocopy = spawn("robocopy", [destination, source, "/MIR", "/MT:8", "/R:2", "/W:1", "/NP", "/NDL"]);
+      robocopy.stdout.resume();
+      robocopy.stderr.resume();
 
       robocopy.on("close", (code) => {
         resolve({
@@ -201,9 +253,7 @@ async function runRestore(): Promise<SyncResult> {
 function scheduleSync() {
   const now = Date.now();
 
-  if (now - lastSyncTime < SYNC_DEBOUNCE_MS) {
-    return;
-  }
+  const delay = Math.max(SYNC_DELAY_MS, SYNC_DEBOUNCE_MS - (now - lastSyncTime));
 
   if (syncTimeout) {
     clearTimeout(syncTimeout);
@@ -223,7 +273,7 @@ function scheduleSync() {
     } else {
       console.error(`[session-backup] Backup failed: ${result.error}`);
     }
-  }, SYNC_DELAY_MS);
+  }, delay);
 }
 
 function getBackupStats(): { sessions: number; size: string; lastModified: Date | null } {
@@ -271,8 +321,8 @@ function getBackupStats(): { sessions: number; size: string; lastModified: Date 
 }
 
 const gdriveSessionSyncPlugin = async (input: PluginInput): Promise<Hooks> => {
-  source = getSource();
-  destination = process.env.OPENCODE_BACKUP_PATH || getDefaultDestination();
+  source = resolve(getSource());
+  destination = resolve(process.env.OPENCODE_BACKUP_PATH || getDefaultDestination());
   debugMode = process.env.OPENCODE_BACKUP_DEBUG === "true";
 
   debugLog("[session-backup] Plugin loaded");
@@ -283,7 +333,7 @@ const gdriveSessionSyncPlugin = async (input: PluginInput): Promise<Hooks> => {
     config: async (config) => {
       const pluginConfig = (config as Record<string, unknown>)["session-backup"] as PluginConfig | undefined;
       if (pluginConfig?.backupPath) {
-        destination = pluginConfig.backupPath;
+        destination = resolve(pluginConfig.backupPath);
       }
       if (pluginConfig?.debug !== undefined) {
         debugMode = pluginConfig.debug;
@@ -351,7 +401,7 @@ const gdriveSessionSyncPlugin = async (input: PluginInput): Promise<Hooks> => {
         args: {},
         async execute() {
           const stats = getBackupStats();
-          const pending = syncTimeout !== null;
+          const pending = syncTimeout !== null || pendingTransfers > 0;
           const timeSinceSync = lastSyncTime ? Math.floor((Date.now() - lastSyncTime) / 1000) : null;
 
           const lines = [

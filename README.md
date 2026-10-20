@@ -186,3 +186,9 @@ google drive desktop can lock files during sync. if you see errors, wait for dri
 ## license
 
 MIT
+
+## safety and verification
+
+Backup and session storage must be separate directory trees, including through existing symlinked parents. Overlapping destinations are rejected before a mirror operation. Relative paths are resolved before invoking native commands, and manual/automatic backups and restores share a serialized transfer queue. Restore still overwrites the current session tree and requires confirm=true.
+
+Run `npm ci` and `npm test`. Tests use temporary synthetic data only. CI verifies a real rsync/robocopy backup/restore round trip and delivery of updates arriving during the cooldown. A separate subprocess regression emits 4 MiB of output to verify restore drains its pipes rather than hanging. Linux/macOS need rsync; Windows uses its installed robocopy. No Google Drive account or real OpenCode session is accessed.
